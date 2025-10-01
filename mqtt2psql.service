@@ -1,0 +1,13 @@
+[Unit]
+Description=MQTT to PSQL Listener Service
+After=network.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/mqtt2psql <broker_address> <topic> <db_connection_string>
+Restart=on-failure
+User=nobody
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target

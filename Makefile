@@ -1,5 +1,5 @@
 CPPFLAGS := -std=c++20 -Wall -Wextra -Iinclude -I/path/to/argparse/include
-LIBS := -lpaho-mqttpp3 -lpaho-mqtt3as -lpqxx -lpq -lcjson
+LIBS := -lpaho-mqttpp3 -lpaho-mqtt3as -lpqxx -lpq -lcjson -lsystemd
 SRC_DIR := src
 INC_DIR := include
 BUILD_DIR := build
