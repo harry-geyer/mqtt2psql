@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+set -o pipefail
+set -u
+
+SERVICE_USER="mqtt2psql"
+SERVICE_GROUP="mqtt2psql"
+
+case "$1" in
+    install|configure|upgrade)
+        if ! id "$SERVICE_USER" &>/dev/null; then
+            echo "Creating user and group for $SERVICE_USER"
+            useradd --system --no-create-home --user-group "$SERVICE_USER"
+        else
+            echo "User $SERVICE_USER already exists."
+        fi
+        ;;
+
+    abort-install|abort-upgrade|abort-remove|abort-configure)
+        ;;
+
+    *)
+        echo "preinst called with unknown argument '$1'" 1>&2
+        exit 1
+        ;;
+esac
+
+exit 0

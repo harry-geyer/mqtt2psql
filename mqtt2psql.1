@@ -1,0 +1,51 @@
+.\" Manpage for mqtt2psql
+.TH MQTT2PSQL 1 "October 2025" "1.0.0" "MQTT to PSQL Listener Service"
+.SH NAME
+mqtt2psql \- MQTT to PostgreSQL Listener Service
+.SH SYNOPSIS
+.B mqtt2psql
+.RI [ options ]
+.SH DESCRIPTION
+The
+.B mqtt2psql
+service listens to MQTT messages and stores them in a PostgreSQL database.
+
+.SH OPTIONS
+.TP
+.B \-c, \--config
+Specify the path to the configuration file. The default is
+.B /etc/mqtt2psql/mqtt2psql.conf.
+.TP
+.B \-h, \--help
+Display this help message and exit.
+.TP
+.B \-v, \--version
+Show the version of the application and exit.
+
+.SH CONFIGURATION FILE
+The configuration file should be in the following format:
+
+.TP
+.B [MQTT]
+broker_address=mqtt://localhost
+topic=default/topic
+
+.TP
+.B [Database]
+db_user=db_user
+db_password=db_password
+db_name=measurements_db
+
+.SH EXAMPLES
+To run the service with the default configuration:
+.B mqtt2psql
+
+To specify a custom configuration file:
+.B mqtt2psql -c /path/to/custom.conf
+
+.SH AUTHOR
+Written by Harry Geyer <harry@geyer.co.uk>.
+
+.SH SEE ALSO
+.BR systemd (1),
+.BR psql (1)

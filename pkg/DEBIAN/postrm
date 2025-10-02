@@ -1,0 +1,39 @@
+#!/bin/bash
+set -e
+set -o pipefail
+set -u
+
+SERVICE_USER="mqtt2psql"
+SERVICE_GROUP="mqtt2psql"
+
+case "$1" in
+    remove|purge)
+        if id "$SERVICE_USER" &>/dev/null; then
+            echo "Removing user and group for $SERVICE_USER"
+            userdel "$SERVICE_USER" || {
+                echo "Failed to remove user $SERVICE_USER" 1>&2
+                exit 1
+            }
+        else
+            echo "User $SERVICE_USER does not exist."
+        fi
+        if getent group "$SERVICE_GROUP" &>/dev/null; then
+            groupdel "$SERVICE_GROUP" || {
+                echo "Failed to remove group $SERVICE_GROUP" 1>&2
+                exit 1
+            }
+        else
+            echo "Group $SERVICE_GROUP does not exist."
+        fi
+        ;;
+
+    abort-remove|abort-upgrade|abort-configure)
+        ;;
+
+    *)
+        echo "postrm called with unknown argument '$1'" 1>&2
+        exit 1
+        ;;
+esac
+
+exit 0

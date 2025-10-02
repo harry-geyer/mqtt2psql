@@ -1,0 +1,32 @@
+#!/bin/bash
+set -e
+set -o pipefail
+set -u
+
+SERVICE_NAME="mqtt2psql"
+INIT_SCRIPT="/etc/init.d/${SERVICE_NAME}"
+SYSTEMD_SERVICE="/lib/systemd/system/${SERVICE_NAME}.service"
+
+case "$1" in
+    remove|purge)
+        if [ -d /run/systemd/system ]; then
+            deb-systemd-helper stop "${SERVICE_NAME}" || {
+                echo "Failed to stop ${SERVICE_NAME} using systemd." 1>&2
+                exit 1
+            }
+        elif [ -x "${INIT_SCRIPT}" ]; then
+            invoke-rc.d "${SERVICE_NAME}" stop || {
+                echo "Failed to stop ${SERVICE_NAME} using init.d." 1>&2
+                exit 1
+            }
+        fi
+        ;;
+
+    abort-remove|abort-upgrade|abort-configure)
+        ;;
+
+    *)
+        echo "prerm called with unknown argument '$1'" 1>&2
+        exit 1
+        ;;
+esac

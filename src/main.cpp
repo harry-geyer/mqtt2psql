@@ -2,12 +2,14 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <memory>
 #include "listener.hpp"
 #include <argparse/argparse.hpp>
 #include <systemd/sd-daemon.h>
 #include <filesystem>
+#include <csignal>
 
-bool load_config(const std::string &config_file, std::string &broker_address, std::string &topic, std::string &db_user, std::string &db_password, std::string &db_name) {
+bool load_config(const std::string &config_file, std::string &broker_address, std::string &topic, std::string &db_user, std::string &db_password, std::string &db_name, std::string &db_host) {
     if (!std::filesystem::exists(config_file)) {
         return false;
     }
@@ -19,20 +21,42 @@ bool load_config(const std::string &config_file, std::string &broker_address, st
     }
 
     std::string line;
+    std::string current_section;
     while (std::getline(file, line)) {
-        std::istringstream iss(line);
-        std::string key, value;
-        if (std::getline(iss, key, '=') && std::getline(iss, value)) {
-            if (key == "broker_address") {
-                broker_address = value;
-            } else if (key == "topic") {
-                topic = value;
-            } else if (key == "db_user") {
-                db_user = value;
-            } else if (key == "db_password") {
-                db_password = value;
-            } else if (key == "db_name") {
-                db_name = value;
+        line.erase(0, line.find_first_not_of(" \t"));
+        line.erase(line.find_last_not_of(" \t") + 1);
+
+        if (line.starts_with('[') && line.ends_with(']')) {
+            current_section = line.substr(1, line.size() - 2);
+            continue;
+        }
+
+        if (!current_section.empty() && line.find('=') != std::string::npos) {
+            std::istringstream iss(line);
+            std::string key, value;
+            if (std::getline(iss, key, '=') && std::getline(iss, value)) {
+                key.erase(0, key.find_first_not_of(" \t"));
+                key.erase(key.find_last_not_of(" \t") + 1);
+                value.erase(0, value.find_first_not_of(" \t"));
+                value.erase(value.find_last_not_of(" \t") + 1);
+
+                if (current_section == "MQTT") {
+                    if (key == "broker_address") {
+                        broker_address = value;
+                    } else if (key == "topic") {
+                        topic = value;
+                    }
+                } else if (current_section == "Database") {
+                    if (key == "db_user") {
+                        db_user = value;
+                    } else if (key == "db_password") {
+                        db_password = value;
+                    } else if (key == "db_name") {
+                        db_name = value;
+                    } else if (key == "db_host") {
+                        db_host = value;
+                    }
+                }
             }
         }
     }
@@ -40,7 +64,16 @@ bool load_config(const std::string &config_file, std::string &broker_address, st
     return true;
 }
 
+void signal_handler(int signum) {
+    std::cout << "Interrupt signal (" << signum << ") received. Exiting..." << std::endl;
+    exit(signum);
+}
+
 int main(int argc, char *argv[]) {
+    // Register signal handler for graceful shutdown
+    std::signal(SIGINT, signal_handler);
+    std::signal(SIGTERM, signal_handler);
+
     argparse::ArgumentParser program("mqtt_listener");
 
     program.add_argument("-c", "--config")
@@ -61,16 +94,18 @@ int main(int argc, char *argv[]) {
     std::string db_user = "db_user";
     std::string db_password = "db_password";
     std::string db_name = "measurements_db";
+    std::string db_host = "localhost";
 
-    if (!load_config(config_file, broker_address, topic, db_user, db_password, db_name)) {
+    if (!load_config(config_file, broker_address, topic, db_user, db_password, db_name, db_host)) {
         std::cerr << "Using default configuration values." << std::endl;
     }
 
-    std::string db_conn_str = "host=localhost dbname=" + db_name + " user=" + db_user + " password=" + db_password;
+    std::string db_conn_str = "host=" + db_host + " dbname=" + db_name + " user=" + db_user + " password=" + db_password;
 
-    mqtt_listener listener(broker_address, topic, db_conn_str);
+    std::unique_ptr<mqtt_listener> listener = std::make_unique<mqtt_listener>(broker_address, topic, db_conn_str);
+
     try {
-        listener.connect();
+        listener->connect();
 
         if (sd_notify(0, "READY=1") < 0) {
             std::cerr << "Failed to notify systemd" << std::endl;
@@ -79,7 +114,8 @@ int main(int argc, char *argv[]) {
         std::cout << "Using configuration file: " << config_file << std::endl;
         std::cout << "Press Enter to exit..." << std::endl;
         std::cin.get();
-        listener.disconnect();
+
+        listener->disconnect();
     } catch (const mqtt::exception &exc) {
         std::cerr << "Error: " << exc.what() << std::endl;
         return 1;
@@ -87,3 +123,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+

@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=notify
-ExecStart=/usr/bin/mqtt2psql <broker_address> <topic> <db_connection_string>
+ExecStart=/usr/bin/mqtt2psql -c /etc/mqtt2psql/mqtt2psql.conf
 Restart=on-failure
-User=nobody
+User=mqtt2psql
 NotifyAccess=all
 
 [Install]

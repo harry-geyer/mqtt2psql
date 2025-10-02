@@ -1,0 +1,47 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          mqtt2psql
+# Required-Start:    $network
+# Required-Stop:     $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: MQTT to PSQL Listener Service
+### END INIT INFO
+
+# Source LSB init functions
+. /lib/lsb/init-functions
+
+case "$1" in
+    start)
+        echo "Starting mqtt2psql"
+        # Use the log_start_msg function for better logging
+        log_start_msg "Starting mqtt2psql"
+        /usr/bin/mqtt2psql -c /etc/mqtt2psql/mqtt2psql.conf &
+        log_end_msg $?
+        ;;
+
+    stop)
+        echo "Stopping mqtt2psql"
+        log_daemon_msg "Stopping mqtt2psql"
+        killall mqtt2psql
+        log_end_msg $?
+        ;;
+
+    restart)
+        $0 stop
+        $0 start
+        ;;
+
+    force-reload)
+        echo "Force-reloading mqtt2psql"
+        $0 stop
+        $0 start
+        ;;
+
+    *)
+        echo "Usage: $0 {start|stop|restart|force-reload}"
+        exit 1
+        ;;
+esac
+
+exit 0

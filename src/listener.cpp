@@ -10,6 +10,10 @@ mqtt_listener::mqtt_listener(const std::string &address, const std::string &topi
     connect_to_postgresql();
 }
 
+mqtt_listener::~mqtt_listener() {
+    disconnect();
+}
+
 void mqtt_listener::connect() {
     mqtt::connect_options conn_opts;
     conn_opts.set_clean_session(true);
@@ -26,15 +30,12 @@ void mqtt_listener::disconnect() {
     client.disconnect()->wait();
     std::cout << "Disconnected!" << std::endl;
 
-    if (db_connection) {
-        delete db_connection;
-        db_connection = nullptr;
-    }
+    db_connection.reset();
 }
 
 void mqtt_listener::connect_to_postgresql() {
     try {
-        db_connection = new pqxx::connection(db_conn_str);
+        db_connection = std::make_unique<pqxx::connection>(db_conn_str);
         std::cout << "Connected to PostgreSQL!" << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Error connecting to PostgreSQL: " << e.what() << std::endl;

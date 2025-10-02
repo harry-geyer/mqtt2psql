@@ -1,0 +1,39 @@
+#!/bin/bash
+set -e
+set -o pipefail
+set -u
+
+SERVICE_NAME="mqtt2psql"
+INIT_SCRIPT="/etc/init.d/${SERVICE_NAME}"
+SYSTEMD_SERVICE="/lib/systemd/system/${SERVICE_NAME}.service"
+
+case "$1" in
+    configure|abort-upgrade|abort-remove|abort-configure)
+        if [ -f "$INIT_SCRIPT" ]; then
+            update-rc.d "$SERVICE_NAME" defaults
+        fi
+
+        if [ -d /run/systemd/system ]; then
+            deb-systemd-helper install "$SYSTEMD_SERVICE" "$SYSTEMD_SERVICE"
+        fi
+        ;;
+
+    triggered)
+        if [ -d /run/systemd/system ]; then
+            deb-systemd-helper restart "${SERVICE_NAME}" || {
+                echo "Failed to restart ${SERVICE_NAME} using systemd." 1>&2
+                exit 1
+            }
+        elif [ -x "${INIT_SCRIPT}" ]; then
+            invoke-rc.d "${SERVICE_NAME}" restart || {
+                echo "Failed to restart ${SERVICE_NAME} using init.d." 1>&2
+                exit 1
+            }
+        fi
+        ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" 1>&2
+        exit 1
+        ;;
+esac

@@ -1,0 +1,2 @@
+/etc/init.d/mqtt2psql
+/etc/mqtt2psql/mqtt2psql.conf
