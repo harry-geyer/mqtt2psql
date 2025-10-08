@@ -5,22 +5,6 @@
 #include "listener.hpp"
 
 
-class MqttClientCallback: public virtual mqtt::callback {
-public:
-    MqttClientCallback(std::function<void(std::string, std::string)> on_message_cb) {
-        m_on_message_cb = on_message_cb;
-    }
-
-    virtual void message_arrived(mqtt::const_message_ptr msg) override {
-        std::cout << "HACK" << std::endl;
-        m_on_message_cb(msg->get_topic(), msg->get_payload_str());
-    }
-
-private:
-    std::function<void(std::string, std::string)>m_on_message_cb;
-};
-
-
 Listener::Listener() {
 }
 
@@ -42,11 +26,13 @@ void Listener::connect(Listener::ctx_t &ctx) {
     conn_opts.set_user_name(ctx.username);
     conn_opts.set_password(ctx.password);
 
-    MqttClientCallback cb(ctx.on_message_cb);
-    m_client->set_callback(cb);
+    m_mqtt_client_callback = std::make_unique<ListenerMqttClientCallback>(ctx.on_message_cb);
+    m_client->set_callback(*m_mqtt_client_callback);
 
     m_client->connect(conn_opts)->wait();
+    std::cout << "MQTT connected" << std::endl;
     m_client->subscribe(ctx.topic, 1)->wait();
+    std::cout << "MQTT subscribed" << std::endl;
 }
 
 void Listener::disconnect() {
