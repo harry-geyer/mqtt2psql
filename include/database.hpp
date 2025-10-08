@@ -15,7 +15,9 @@ public:
     };
 
     struct measurement_t{
+        std::string sensor;
         std::string name;
+        std::chrono::nanoseconds time;
         double value;
     };
 

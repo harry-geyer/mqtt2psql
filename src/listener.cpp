@@ -30,9 +30,7 @@ void Listener::connect(Listener::ctx_t &ctx) {
     m_client->set_callback(*m_mqtt_client_callback);
 
     m_client->connect(conn_opts)->wait();
-    std::cout << "MQTT connected" << std::endl;
     m_client->subscribe(ctx.topic, 1)->wait();
-    std::cout << "MQTT subscribed" << std::endl;
 }
 
 void Listener::disconnect() {

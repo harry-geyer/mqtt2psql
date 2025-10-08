@@ -5,11 +5,16 @@
 #include <atomic>
 #include <thread>
 #include <chrono>
+#include <vector>
 #include <argparse/argparse.hpp>
 #include <systemd/sd-daemon.h>
+#include <nlohmann/json.hpp>
 
 #include "database.hpp"
 #include "listener.hpp"
+
+
+using json = nlohmann::json;
 
 
 class Mqtt2Psql {
@@ -128,6 +133,56 @@ private:
     void on_message_cb(std::string topic, std::string payload) {
         std::cout << "Topic: " << topic << std::endl;
         std::cout << "Payload: " << payload << std::endl;
+
+        std::chrono::system_clock::duration now =
+            std::chrono::system_clock::now().time_since_epoch();
+
+        std::chrono::nanoseconds now_ns =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+
+        std::vector<DatabaseConnection::measurement_t> measurements;
+        try {
+            json j = json::parse(payload);
+            std::string sensor_name = j.value("sensor", "");
+            if (sensor_name.empty()) {
+                std::cerr << "payload missing sensor name" << std::endl;
+                return;
+            }
+            if (!j.contains("measurements") || !j["measurements"].is_array()) {
+                std::cerr << "payload missing measurements array" << std::endl;
+                return;
+            }
+            const json& measurement_array = j["measurements"];
+            for (std::size_t i = 0; i < measurement_array.size(); ++i) {
+                const json& jm = measurement_array[i];
+
+                std::string name = jm.value("name", "");
+                if (name.empty()) {
+                    std::cerr << "payload missing measurement name" << std::endl;
+                    continue;
+                }
+
+                double value = jm.value("value", 0.0);
+
+                DatabaseConnection::measurement_t m;
+                m.sensor = sensor_name;
+                m.name = name;
+                m.time = now_ns;
+                m.value = value;
+
+                measurements.push_back(m);
+            }
+        } catch (const json::parse_error& e) {
+            std::cerr << "JSON parse error: " << e.what() << std::endl;
+            return;
+        } catch (const json::type_error& e) {
+            std::cerr << "JSON type error: " << e.what() << std::endl;
+            return;
+        }
+        for (std::size_t i = 0; i < measurements.size(); ++i) {
+            DatabaseConnection::measurement_t& m = measurements[i];
+            m_db.insert_datapoint(m);
+        }
     }
 
     static void signal_handler(int signal) {
