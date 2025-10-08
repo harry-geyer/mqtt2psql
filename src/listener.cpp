@@ -1,77 +1,64 @@
+
+
+#include <mqtt/async_client.h>
+
 #include "listener.hpp"
-#include <iostream>
-#include <cjson/cJSON.h>
-#include <pqxx/pqxx>
 
 
-mqtt_listener::mqtt_listener(const std::string &address, const std::string &topic, const std::string &db_conn_str)
-    : client(address, ""), topic(topic), db_conn_str(db_conn_str), db_connection(nullptr) {
-    client.set_callback(*this);
-    connect_to_postgresql();
+class MqttClientCallback: public virtual mqtt::callback {
+public:
+    MqttClientCallback(std::function<void(std::string, std::string)> on_message_cb) {
+        m_on_message_cb = on_message_cb;
+    }
+
+    virtual void message_arrived(mqtt::const_message_ptr msg) override {
+        std::cout << "HACK" << std::endl;
+        m_on_message_cb(msg->get_topic(), msg->get_payload_str());
+    }
+
+private:
+    std::function<void(std::string, std::string)>m_on_message_cb;
+};
+
+
+Listener::Listener() {
 }
 
-mqtt_listener::~mqtt_listener() {
+Listener::~Listener() {
     disconnect();
 }
 
-void mqtt_listener::connect() {
-    mqtt::connect_options conn_opts;
-    conn_opts.set_clean_session(true);
-    std::cout << "Connecting to the MQTT broker..." << std::endl;
-    client.connect(conn_opts)->wait();
-    std::cout << "Connected!" << std::endl;
-
-    client.subscribe(topic, 1);
-    std::cout << "Subscribed to topic: " << topic << std::endl;
-}
-
-void mqtt_listener::disconnect() {
-    std::cout << "Disconnecting..." << std::endl;
-    client.disconnect()->wait();
-    std::cout << "Disconnected!" << std::endl;
-
-    db_connection.reset();
-}
-
-void mqtt_listener::connect_to_postgresql() {
-    try {
-        db_connection = std::make_unique<pqxx::connection>(db_conn_str);
-        std::cout << "Connected to PostgreSQL!" << std::endl;
-    } catch (const std::exception &e) {
-        std::cerr << "Error connecting to PostgreSQL: " << e.what() << std::endl;
-    }
-}
-
-void mqtt_listener::on_message(const mqtt::const_message_ptr &msg) {
-    std::cout << "Message received: " << msg->get_payload() << std::endl;
-
-    const std::string json_payload = msg->get_payload();
-    send_to_postgresql(json_payload);
-}
-
-void mqtt_listener::send_to_postgresql(const std::string &json_string) {
-    cJSON *json_data = cJSON_Parse(json_string.c_str());
-    if (json_data == nullptr) {
-        std::cerr << "Error parsing JSON" << std::endl;
+void Listener::connect(Listener::ctx_t &ctx) {
+    if (is_connected()) {
         return;
     }
+    std::ostringstream addr;
+    addr << "tcp://" << ctx.address << ":" << ctx.port;
+    m_client = std::make_unique<mqtt::async_client>(addr.str());
 
-    const cJSON *key = cJSON_GetObjectItemCaseSensitive(json_data, "key");
-    const cJSON *value = cJSON_GetObjectItemCaseSensitive(json_data, "value");
+    mqtt::connect_options conn_opts;
+    conn_opts.set_keep_alive_interval(20);
+    conn_opts.set_clean_session(true);
+    conn_opts.set_user_name(ctx.username);
+    conn_opts.set_password(ctx.password);
 
-    if (cJSON_IsString(key) && (key->valuestring != nullptr) &&
-        cJSON_IsString(value) && (value->valuestring != nullptr)) {
+    MqttClientCallback cb(ctx.on_message_cb);
+    m_client->set_callback(cb);
 
-        try {
-            pqxx::work W(*db_connection);
-            std::string query = "INSERT INTO your_table (key, value) VALUES (" + W.quote(key->valuestring) + ", " + W.quote(value->valuestring) + ");";
-            W.exec(query);
-            W.commit();
-            std::cout << "Data inserted into PostgreSQL: " << key->valuestring << ", " << value->valuestring << std::endl;
-        } catch (const std::exception &e) {
-            std::cerr << "Error inserting data into PostgreSQL: " << e.what() << std::endl;
-        }
-    }
-
-    cJSON_Delete(json_data);
+    m_client->connect(conn_opts)->wait();
+    m_client->subscribe(ctx.topic, 1)->wait();
 }
+
+void Listener::disconnect() {
+    if (!is_connected()) {
+        return;
+    }
+}
+
+bool Listener::is_connected() {
+    if (!m_client) {
+        return false;
+    }
+    return m_client->is_connected();
+}
+

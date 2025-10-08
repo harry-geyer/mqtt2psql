@@ -1,79 +1,144 @@
 #include <iostream>
 #include <string>
 #include <fstream>
-#include <sstream>
-#include <memory>
-#include "listener.hpp"
+#include <csignal>
+#include <atomic>
+#include <thread>
+#include <chrono>
 #include <argparse/argparse.hpp>
 #include <systemd/sd-daemon.h>
-#include <filesystem>
-#include <csignal>
 
-bool load_config(const std::string &config_file, std::string &broker_address, std::string &topic, std::string &db_user, std::string &db_password, std::string &db_name, std::string &db_host) {
-    if (!std::filesystem::exists(config_file)) {
-        return false;
-    }
+#include "database.hpp"
+#include "listener.hpp"
 
-    std::ifstream file(config_file);
-    if (!file.is_open()) {
-        std::cerr << "Could not open config file: " << config_file << std::endl;
-        return false;
-    }
 
-    std::string line;
-    std::string current_section;
-    while (std::getline(file, line)) {
-        line.erase(0, line.find_first_not_of(" \t"));
-        line.erase(line.find_last_not_of(" \t") + 1);
+class Mqtt2Psql {
+public:
+    Mqtt2Psql(std::string config_file) {
+        std::function<void(std::string, std::string)> listener_on_message_cb =
+        [this](std::string topic, std::string payload) {
+            this->on_message_cb(topic, payload);
+        };
 
-        if (line.starts_with('[') && line.ends_with(']')) {
-            current_section = line.substr(1, line.size() - 2);
-            continue;
+        DatabaseConnection::ctx_t db_ctx = {
+            .name = "measurements_db",
+            .username = "db_user",
+            .password = "db_password",
+            .address = "localhost",
+            .port = 5432,
+        };
+
+        Listener::ctx_t listener_ctx = {
+            .address = "localhost",
+            .port = 1883,
+            .username = "mqtt_user",
+            .password = "mqtt_password",
+            .topic = "measurements/#",
+            .on_message_cb = listener_on_message_cb,
+        };
+
+        if (!load_config(config_file, db_ctx, listener_ctx)) {
+            std::cerr << "Using default configuration values." << std::endl;
         }
 
-        if (!current_section.empty() && line.find('=') != std::string::npos) {
-            std::istringstream iss(line);
-            std::string key, value;
-            if (std::getline(iss, key, '=') && std::getline(iss, value)) {
-                key.erase(0, key.find_first_not_of(" \t"));
-                key.erase(key.find_last_not_of(" \t") + 1);
-                value.erase(0, value.find_first_not_of(" \t"));
-                value.erase(value.find_last_not_of(" \t") + 1);
+        m_db.connect(db_ctx);
+        m_db.create_tables();
 
-                if (current_section == "MQTT") {
-                    if (key == "broker_address") {
-                        broker_address = value;
-                    } else if (key == "topic") {
-                        topic = value;
-                    }
-                } else if (current_section == "Database") {
-                    if (key == "db_user") {
-                        db_user = value;
-                    } else if (key == "db_password") {
-                        db_password = value;
-                    } else if (key == "db_name") {
-                        db_name = value;
-                    } else if (key == "db_host") {
-                        db_host = value;
+        m_listener.connect(listener_ctx);
+    }
+
+    void run() {
+        std::cout << "Running... press Ctrl+C to exit." << std::endl;
+        std::signal(SIGINT, signal_handler);
+        while (!m_stop_flag.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
+        std::cout << "\rShutting down..." << std::endl;
+    }
+
+private:
+    DatabaseConnection m_db;
+    Listener m_listener;
+    static inline std::atomic<bool> m_stop_flag = false;
+
+    bool load_config(const std::string &config_file, DatabaseConnection::ctx_t &db_ctx, Listener::ctx_t &listener_ctx) {
+        if (!std::filesystem::exists(config_file)) {
+            return false;
+        }
+
+        std::ifstream file(config_file);
+        if (!file.is_open()) {
+            std::cerr << "Could not open config file: " << config_file << std::endl;
+            return false;
+        }
+
+        std::string line;
+        std::string current_section;
+        while (std::getline(file, line)) {
+            line.erase(0, line.find_first_not_of(" \t"));
+            line.erase(line.find_last_not_of(" \t") + 1);
+
+            if (line.starts_with('[') && line.ends_with(']')) {
+                current_section = line.substr(1, line.size() - 2);
+                continue;
+            }
+
+            if (!current_section.empty() && line.find('=') != std::string::npos) {
+                std::istringstream iss(line);
+                std::string key, value;
+                if (std::getline(iss, key, '=') && std::getline(iss, value)) {
+                    key.erase(0, key.find_first_not_of(" \t"));
+                    key.erase(key.find_last_not_of(" \t") + 1);
+                    value.erase(0, value.find_first_not_of(" \t"));
+                    value.erase(value.find_last_not_of(" \t") + 1);
+
+                    if (current_section == "MQTT") {
+                        if (key == "broker_address") {
+                            listener_ctx.address = value;
+                        } else if (key == "port") {
+                            listener_ctx.port = std::stoul(value);
+                        } else if (key == "topic") {
+                            listener_ctx.topic = value;
+                        } else if (key == "username") {
+                            listener_ctx.username = value;
+                        } else if (key == "password") {
+                            listener_ctx.password = value;
+                        }
+                    } else if (current_section == "Database") {
+                        if (key == "db_name") {
+                            db_ctx.name = value;
+                        } else if (key == "db_password") {
+                            db_ctx.password = value;
+                        } else if (key == "db_name") {
+                            db_ctx.username = value;
+                        } else if (key == "db_host") {
+                            db_ctx.address = value;
+                        } else if (key == "db_port") {
+                            db_ctx.port = std::stoul(value);
+                        }
                     }
                 }
             }
         }
+
+        return true;
     }
 
-    return true;
-}
+    void on_message_cb(std::string topic, std::string payload) {
+        std::cout << "Topic: " << topic << std::endl;
+        std::cout << "Payload: " << payload << std::endl;
+    }
 
-void signal_handler(int signum) {
-    std::cout << "Interrupt signal (" << signum << ") received. Exiting..." << std::endl;
-    exit(signum);
-}
+    static void signal_handler(int signal) {
+        if (signal == SIGINT) {
+            m_stop_flag.store(true);
+        }
+    }
+};
+
 
 int main(int argc, char *argv[]) {
-    // Register signal handler for graceful shutdown
-    std::signal(SIGINT, signal_handler);
-    std::signal(SIGTERM, signal_handler);
-
     argparse::ArgumentParser program("mqtt_listener");
 
     program.add_argument("-c", "--config")
@@ -87,40 +152,12 @@ int main(int argc, char *argv[]) {
         std::cerr << program;
         return 1;
     }
-
     std::string config_file = program.get<std::string>("--config");
-    std::string broker_address = "mqtt://localhost";
-    std::string topic = "default/topic";
-    std::string db_user = "db_user";
-    std::string db_password = "db_password";
-    std::string db_name = "measurements_db";
-    std::string db_host = "localhost";
-
-    if (!load_config(config_file, broker_address, topic, db_user, db_password, db_name, db_host)) {
-        std::cerr << "Using default configuration values." << std::endl;
+    Mqtt2Psql mqtt2psql(config_file);
+    if (sd_notify(0, "READY=1") < 0) {
+        std::cerr << "Failed to notify systemd" << std::endl;
     }
-
-    std::string db_conn_str = "host=" + db_host + " dbname=" + db_name + " user=" + db_user + " password=" + db_password;
-
-    std::unique_ptr<mqtt_listener> listener = std::make_unique<mqtt_listener>(broker_address, topic, db_conn_str);
-
-    try {
-        listener->connect();
-
-        if (sd_notify(0, "READY=1") < 0) {
-            std::cerr << "Failed to notify systemd" << std::endl;
-        }
-
-        std::cout << "Using configuration file: " << config_file << std::endl;
-        std::cout << "Press Enter to exit..." << std::endl;
-        std::cin.get();
-
-        listener->disconnect();
-    } catch (const mqtt::exception &exc) {
-        std::cerr << "Error: " << exc.what() << std::endl;
-        return 1;
-    }
+    mqtt2psql.run();
 
     return 0;
 }
-
