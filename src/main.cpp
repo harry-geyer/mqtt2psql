@@ -194,7 +194,7 @@ private:
 
 
 int main(int argc, char *argv[]) {
-    argparse::ArgumentParser program("mqtt_listener");
+    argparse::ArgumentParser program("mqtt2psql", VERSION_NUMBER);
 
     program.add_argument("-c", "--config")
         .default_value("/etc/mqtt2psql/mqtt2psql.conf")

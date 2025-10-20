@@ -22,6 +22,8 @@ CL_VER := $(shell sed -nE '1s/[^ ].*\(([0-9\.]+)\).*$$/\1/p' "changelog.Debian")
 MAN_VER := $(shell sed -nE 's/^\.TH.*"([0-9\.]+)".*$$/\1/p' "mqtt2psql.1")
 VERSION := $(GIT_TAG)
 
+CPPFLAGS += -DVERSION_NUMBER='"$(VERSION)"'
+
 define CHECK_VERSION
 ifneq ($1,$2)
 $$(error GIT_TAG ($1) is not the same as $3 ($2))
