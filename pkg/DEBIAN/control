@@ -3,7 +3,8 @@ Version: 1.0.1
 Section: utils
 Priority: optional
 Architecture: amd64
-Depends: libc6 (>= 2.28), libcjson-dev, libpaho-mqttpp-dev, libpqxx-dev, libpq-dev, systemd
+Depends: libc6 (>= 2.28), libpaho-mqttpp-dev, libpqxx-dev, libpq-dev
+Suggests: systemd
 Maintainer: Harry Geyer <harry@geyer.co.uk>
 Description: MQTT to PSQL Listener Service
  A service that listens to MQTT messages and stores them in a PostgreSQL
