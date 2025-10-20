@@ -1,7 +1,16 @@
 PACKAGE_NAME := mqtt2psql
 
 CPPFLAGS := -std=c++20 -Wall -Wextra -Iinclude -I/path/to/argparse/include
-LIBS := -lpaho-mqttpp3 -lpaho-mqtt3as -lpqxx -lpq -lcjson -lsystemd
+LIBS := -lpaho-mqttpp3 -lpaho-mqtt3as -lpqxx -lpq
+
+NO_SYSD?=0
+ifeq (${NO_SYSD}, 0)
+    LIBS += -lsystemd
+else
+    $(info Building without systemd)
+    CPPFLAGS += -DNO_SYSD
+endif
+
 SRC_DIR := src
 INC_DIR := include
 BUILD_DIR := build

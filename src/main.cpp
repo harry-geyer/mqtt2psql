@@ -7,7 +7,9 @@
 #include <chrono>
 #include <vector>
 #include <argparse/argparse.hpp>
+#ifndef NO_SYSD
 #include <systemd/sd-daemon.h>
+#endif // NO_SYSD
 #include <nlohmann/json.hpp>
 
 #include "database.hpp"
@@ -209,9 +211,13 @@ int main(int argc, char *argv[]) {
     }
     std::string config_file = program.get<std::string>("--config");
     Mqtt2Psql mqtt2psql(config_file);
+
+#ifndef NO_SYSD
     if (sd_notify(0, "READY=1") < 0) {
         std::cerr << "Failed to notify systemd" << std::endl;
     }
+#endif // NO_SYSD
+
     mqtt2psql.run();
 
     return 0;
