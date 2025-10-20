@@ -1,7 +1,16 @@
 PACKAGE_NAME := mqtt2psql
 
 CPPFLAGS := -std=c++20 -Wall -Wextra -Iinclude -I/path/to/argparse/include
-LIBS := -lpaho-mqttpp3 -lpaho-mqtt3as -lpqxx -lpq -lcjson -lsystemd
+LIBS := -lpaho-mqttpp3 -lpaho-mqtt3as -lpqxx -lpq
+
+NO_SYSD?=0
+ifeq (${NO_SYSD}, 0)
+    LIBS += -lsystemd
+else
+    $(info Building without systemd)
+    CPPFLAGS += -DNO_SYSD
+endif
+
 SRC_DIR := src
 INC_DIR := include
 BUILD_DIR := build
@@ -21,6 +30,8 @@ DEB_VER := $(shell sed -nE 's/Version: *([0-9\.]+)/\1/p' "${PKG_DIR}/DEBIAN/cont
 CL_VER := $(shell sed -nE '1s/[^ ].*\(([0-9\.]+)\).*$$/\1/p' "changelog.Debian")
 MAN_VER := $(shell sed -nE 's/^\.TH.*"([0-9\.]+)".*$$/\1/p' "mqtt2psql.1")
 VERSION := $(GIT_TAG)
+
+CPPFLAGS += -DVERSION_NUMBER='"$(VERSION)"'
 
 define CHECK_VERSION
 ifneq ($1,$2)
