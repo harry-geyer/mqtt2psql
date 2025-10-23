@@ -1,6 +1,6 @@
 PACKAGE_NAME := mqtt2psql
 
-CPPFLAGS := -std=c++20 -Wall -Wextra -Iinclude -I/path/to/argparse/include
+CPPFLAGS := -std=c++20 -Wall -Wextra -Iinclude
 LIBS := -lpaho-mqttpp3 -lpaho-mqtt3as -lpqxx -lpq
 
 NO_SYSD?=0
